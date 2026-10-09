@@ -356,23 +356,39 @@ function startQuiz(key){
 }
 
 /* ---------- Feedback ---------- */
-// للحفظ الدائم لكل الزوار: عبّي رابط ومفتاح Supabase (انظر الشرح). بدونهم يحفظ بمتصفح الزائر فقط.
-const SB_URL='',SB_KEY='';
+// ===== إعدادات Supabase: عبّي الاثنين عشان الشكاوي والاقتراحات تظهر لكل الزوار =====
+const SB_URL='';   // مثال: 'https://abcdxyz.supabase.co'  (بدون / في الآخر)
+const SB_KEY='';   // مفتاح anon / publishable
+// =====================================================================================
 const LS='ee_feedback';
 const sbOn=()=>SB_URL&&SB_KEY;
-const sbH=()=>({apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'});
+const sbH=()=>{const h={apikey:SB_KEY,'Content-Type':'application/json'};if(SB_KEY.indexOf('eyJ')===0)h.Authorization='Bearer '+SB_KEY;return h};
+const errMsg=async r=>'HTTP '+r.status+' '+(await r.text()).slice(0,160);
 function lsGet(){try{return JSON.parse(localStorage.getItem(LS))||[]}catch(e){return []}}
 function lsSet(a){try{localStorage.setItem(LS,JSON.stringify(a))}catch(e){}}
 async function fbLoad(){
-  if(sbOn()){try{const r=await fetch(SB_URL+'/rest/v1/feedback?select=*&order=created_at.desc&limit=200',{headers:sbH()});if(r.ok)return await r.json()}catch(e){}}
+  if(sbOn()){
+    const r=await fetch(SB_URL+'/rest/v1/feedback?select=*&order=created_at.desc&limit=200',{headers:sbH()});
+    if(!r.ok)throw new Error(await errMsg(r));
+    return await r.json();
+  }
   return lsGet();
 }
 async function fbAdd(item){
-  if(sbOn()){try{const r=await fetch(SB_URL+'/rest/v1/feedback',{method:'POST',headers:Object.assign({Prefer:'return=minimal'},sbH()),body:JSON.stringify(item)});if(r.ok)return}catch(e){}}
+  if(sbOn()){
+    const r=await fetch(SB_URL+'/rest/v1/feedback',{method:'POST',headers:Object.assign({Prefer:'return=minimal'},sbH()),body:JSON.stringify(item)});
+    if(!r.ok)throw new Error(await errMsg(r));
+    return;
+  }
   const a=lsGet();a.unshift(Object.assign({created_at:new Date().toISOString()},item));lsSet(a);
 }
 async function renderLists(){
-  const all=await fbLoad();
+  let all;
+  try{all=await fbLoad()}catch(err){
+    ['complaint','suggestion'].forEach(k=>{const b=document.getElementById('l-'+k);b.textContent='';
+      const p=document.createElement('p');p.className='err';p.textContent='تعذر تحميل البيانات: '+err.message;b.appendChild(p)});
+    return;
+  }
   ['complaint','suggestion'].forEach(k=>{
     const box=document.getElementById('l-'+k);box.textContent='';
     const rows=all.filter(x=>x.kind===k);
@@ -414,7 +430,8 @@ function showResult(kind,text,btns){
 const SIT='اقعد على شكوتك والسفير؟';
 document.getElementById('f-complaint').addEventListener('submit',async e=>{
   e.preventDefault();const f=e.target.elements;
-  await fbAdd({kind:'complaint',name:f.nm.value.trim().slice(0,30),rating:null,body:f.body.value.trim().slice(0,500)});
+  try{await fbAdd({kind:'complaint',name:f.nm.value.trim().slice(0,30),rating:null,body:f.body.value.trim().slice(0,500)})}
+  catch(err){showResult('complaint','ما انحفظت الشكوى 😔 ('+err.message+')',[['رجوع','alt',closeAll]]);return}
   showResult('complaint',SIT,[['تمام','alt',closeAll]]);renderLists();
 });
 document.getElementById('f-suggestion').addEventListener('submit',async e=>{
@@ -422,13 +439,16 @@ document.getElementById('f-suggestion').addEventListener('submit',async e=>{
   if(!rating){document.getElementById('sErr').textContent='اختر عدد النجوم أول';return}
   const f=e.target.elements;
   const item={kind:'suggestion',name:f.nm.value.trim().slice(0,30),rating:rating,body:f.body.value.trim().slice(0,500)};
-  const save=async it=>{await fbAdd(it);renderLists()};
+  const save=async it=>{
+    try{await fbAdd(it);renderLists();return true}
+    catch(err){showResult('suggestion','ما انحفظ الاقتراح 😔 ('+err.message+')',[['رجوع','alt',closeAll]]);return false}
+  };
   if(rating<=3){
     showResult('suggestion','خلهم خمس، ولا بخليك تقعد على حق السفير 😤',[
-      ['خلاص خمس ⭐','',async()=>{await save(Object.assign({},item,{rating:5}));showResult('suggestion',SIT,[['تمام','alt',closeAll]])}],
-      ['لا، خليه','alt',async()=>{await save(item);showResult('suggestion','اقعد على حق السفير 😏',[['تمام','alt',closeAll]])}]
+      ['خلاص خمس ⭐','',async()=>{if(await save(Object.assign({},item,{rating:5})))showResult('suggestion',SIT,[['تمام','alt',closeAll]])}],
+      ['لا، خليه','alt',async()=>{if(await save(item))showResult('suggestion','اقعد على حق السفير 😏',[['تمام','alt',closeAll]])}]
     ]);
-  }else{await save(item);showResult('suggestion',SIT,[['تمام','alt',closeAll]])}
+  }else{if(await save(item))showResult('suggestion',SIT,[['تمام','alt',closeAll]])}
 });
 
 route();

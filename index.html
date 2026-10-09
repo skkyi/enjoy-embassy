@@ -108,6 +108,24 @@ footer{text-align:center;color:var(--muted);font-size:15px;margin-top:60px}
   .intro h1{font-size:26px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+[hidden]{display:none!important}
+.fbox{margin:26px 0 10px}
+.fbox form{display:grid;gap:14px}
+.fbox label{font-size:20px}
+input,textarea{width:100%;padding:12px 16px;font:inherit;font-size:18px;color:var(--text);background:var(--panel);border:2px solid var(--line);border-radius:10px}
+input:focus,textarea:focus{outline:none;border-color:var(--green);box-shadow:var(--glow)}
+textarea{min-height:130px;resize:vertical}
+.starsin{display:flex;gap:6px}
+.star{background:none;border:0;font-size:38px;line-height:1;color:#6b4a3a;cursor:pointer;padding:0 2px}
+.star.on{color:#f5cd6e;text-shadow:0 0 10px rgba(245,205,110,.6)}
+.result p{font-size:24px;margin-bottom:16px}
+.err{color:#ff7a6b;min-height:1.4em}
+.list{display:grid;gap:14px;margin-bottom:34px}
+.entry{padding:16px 20px;border:1px solid var(--line);border-radius:12px;background:rgba(59,33,23,.6)}
+.eh{display:flex;justify-content:space-between;gap:12px;margin-bottom:4px;font-size:19px}
+.entry p{color:var(--muted);font-size:18px;white-space:pre-wrap;overflow-wrap:anywhere}
+.stars{color:#f5cd6e;letter-spacing:2px}
+.empty{color:var(--muted);font-size:18px}
 </style>
 </head>
 <body>
@@ -120,6 +138,7 @@ footer{text-align:center;color:var(--muted);font-size:15px;margin-top:60px}
       <a href="#home" data-p="home">الرئيسية</a>
       <a href="#services" data-p="services">خدمات</a>
       <a href="#about" data-p="about">من نحن</a>
+      <a href="#feedback" data-p="feedback">الشكاوي والاقتراحات</a>
       <a href="#contact" data-p="contact">اتصل بنا</a>
     </nav>
     <div class="side-foot">© سفارة إنجوي</div>
@@ -182,6 +201,47 @@ footer{text-align:center;color:var(--muted);font-size:15px;margin-top:60px}
       <div class="quiz" id="quiz-job"></div>
     </div>
 
+    <!-- الشكاوي والاقتراحات -->
+    <div class="page" id="p-feedback">
+      <h2>الشكاوي والاقتراحات</h2>
+      <div class="cards">
+        <div class="card"><div class="ico">📣</div><h3>رفع شكوى</h3><p>افا وش مزعلك ياحبيبي ياحبيبي</p>
+          <button class="btn" type="button" data-open="complaint">رفع شكوى</button></div>
+        <div class="card"><div class="ico">💡</div><h3>اقتراح</h3><p>ليه مب عاجبك موقعنا ؟</p>
+          <button class="btn" type="button" data-open="suggestion">رفع اقتراح</button></div>
+      </div>
+
+      <div class="quiz fbox" id="fb-complaint" hidden>
+        <form id="f-complaint">
+          <label for="cn">اكتب اسمك</label>
+          <input id="cn" name="nm" maxlength="30" required autocomplete="off">
+          <label for="cb">شكواي للي يفتهم شكواي</label>
+          <textarea id="cb" name="body" maxlength="500" required placeholder="اكتب مشكلتك ياقروشه"></textarea>
+          <div><button class="btn" type="submit">رفع شكوى</button></div>
+        </form>
+        <div class="result" hidden></div>
+      </div>
+
+      <div class="quiz fbox" id="fb-suggestion" hidden>
+        <form id="f-suggestion">
+          <label for="sn">الاسم</label>
+          <input id="sn" name="nm" maxlength="30" required autocomplete="off">
+          <label>تقييم من خمس نجوم</label>
+          <div class="starsin" id="stars" role="group" aria-label="التقييم"></div>
+          <label for="sb">الاقتراح</label>
+          <textarea id="sb" name="body" maxlength="500" required></textarea>
+          <div class="err" id="sErr" role="alert"></div>
+          <div><button class="btn" type="submit">رفع اقتراح</button></div>
+        </form>
+        <div class="result" hidden></div>
+      </div>
+
+      <h2 style="margin-top:40px">الشكاوي</h2>
+      <div class="list" id="l-complaint"></div>
+      <h2>الاقتراحات</h2>
+      <div class="list" id="l-suggestion"></div>
+    </div>
+
     <!-- من نحن -->
     <div class="page" id="p-about">
       <h2>من نحن</h2>
@@ -216,6 +276,7 @@ function route(){
   navLinks.forEach(a=>a.classList.toggle('active',a.dataset.p===act));
   if(pg==='asylum')startQuiz('asylum');
   if(pg==='job')startQuiz('job');
+  if(pg==='feedback')renderLists();
   scrollTo(0,0);
 }
 addEventListener('hashchange',route);
@@ -293,6 +354,82 @@ function startQuiz(key){
   };
   show();
 }
+
+/* ---------- Feedback ---------- */
+// للحفظ الدائم لكل الزوار: عبّي رابط ومفتاح Supabase (انظر الشرح). بدونهم يحفظ بمتصفح الزائر فقط.
+const SB_URL='',SB_KEY='';
+const LS='ee_feedback';
+const sbOn=()=>SB_URL&&SB_KEY;
+const sbH=()=>({apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'});
+function lsGet(){try{return JSON.parse(localStorage.getItem(LS))||[]}catch(e){return []}}
+function lsSet(a){try{localStorage.setItem(LS,JSON.stringify(a))}catch(e){}}
+async function fbLoad(){
+  if(sbOn()){try{const r=await fetch(SB_URL+'/rest/v1/feedback?select=*&order=created_at.desc&limit=200',{headers:sbH()});if(r.ok)return await r.json()}catch(e){}}
+  return lsGet();
+}
+async function fbAdd(item){
+  if(sbOn()){try{const r=await fetch(SB_URL+'/rest/v1/feedback',{method:'POST',headers:Object.assign({Prefer:'return=minimal'},sbH()),body:JSON.stringify(item)});if(r.ok)return}catch(e){}}
+  const a=lsGet();a.unshift(Object.assign({created_at:new Date().toISOString()},item));lsSet(a);
+}
+async function renderLists(){
+  const all=await fbLoad();
+  ['complaint','suggestion'].forEach(k=>{
+    const box=document.getElementById('l-'+k);box.textContent='';
+    const rows=all.filter(x=>x.kind===k);
+    if(!rows.length){const p=document.createElement('p');p.className='empty';p.textContent=k==='complaint'?'ما في شكاوي… الكل مبسوط 😌':'ما في اقتراحات للحين';box.appendChild(p);return}
+    rows.forEach(x=>{
+      const c=document.createElement('div');c.className='entry';
+      const h=document.createElement('div');h.className='eh';
+      const n=document.createElement('b');n.textContent=x.name;h.appendChild(n);
+      if(x.rating){const s=document.createElement('span');s.className='stars';s.textContent='★'.repeat(x.rating)+'☆'.repeat(5-x.rating);h.appendChild(s)}
+      const p=document.createElement('p');p.textContent=x.body;
+      c.appendChild(h);c.appendChild(p);box.appendChild(c);
+    });
+  });
+}
+let rating=0;
+const starsBox=document.getElementById('stars');
+function paintStars(){[...starsBox.children].forEach((b,i)=>b.classList.toggle('on',i<rating))}
+for(let i=1;i<=5;i++){const b=document.createElement('button');b.type='button';b.className='star';b.textContent='★';
+  b.setAttribute('aria-label',i+' من 5');b.onclick=()=>{rating=i;paintStars();document.getElementById('sErr').textContent=''};starsBox.appendChild(b)}
+function resetForms(){
+  ['complaint','suggestion'].forEach(k=>{const f=document.getElementById('f-'+k);f.reset();f.hidden=false;
+    const r=document.querySelector('#fb-'+k+' .result');r.hidden=true;r.textContent=''});
+  rating=0;paintStars();document.getElementById('sErr').textContent='';
+}
+function closeAll(){['complaint','suggestion'].forEach(k=>document.getElementById('fb-'+k).hidden=true);resetForms()}
+document.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{
+  resetForms();
+  ['complaint','suggestion'].forEach(k=>document.getElementById('fb-'+k).hidden=k!==b.dataset.open);
+  document.getElementById('fb-'+b.dataset.open).scrollIntoView({behavior:'smooth',block:'center'});
+});
+function showResult(kind,text,btns){
+  document.getElementById('f-'+kind).hidden=true;
+  const r=document.querySelector('#fb-'+kind+' .result');r.hidden=false;r.textContent='';
+  const p=document.createElement('p');p.textContent=text;r.appendChild(p);
+  const row=document.createElement('div');row.className='row';
+  btns.forEach(x=>{const b=document.createElement('button');b.type='button';b.className='btn '+x[1];b.textContent=x[0];b.onclick=x[2];row.appendChild(b)});
+  r.appendChild(row);
+}
+const SIT='اقعد على شكوتك والسفير؟';
+document.getElementById('f-complaint').addEventListener('submit',async e=>{
+  e.preventDefault();const f=e.target.elements;
+  await fbAdd({kind:'complaint',name:f.nm.value.trim().slice(0,30),rating:null,body:f.body.value.trim().slice(0,500)});
+  showResult('complaint',SIT,[['تمام','alt',closeAll]]);renderLists();
+});
+document.getElementById('f-suggestion').addEventListener('submit',async e=>{
+  e.preventDefault();
+  if(!rating){document.getElementById('sErr').textContent='اختر عدد النجوم أول';return}
+  const f=e.target.elements;
+  const item={kind:'suggestion',name:f.nm.value.trim().slice(0,30),rating:rating,body:f.body.value.trim().slice(0,500)};
+  const save=async it=>{await fbAdd(it);renderLists()};
+  if(rating<=3){
+    showResult('suggestion','خلهم خمس، ولا بخليك تقعد على حق السفير 😤',[
+      ['خلاص خمس ⭐','',async()=>{await save(Object.assign({},item,{rating:5}));showResult('suggestion',SIT,[['تمام','alt',closeAll]])}],
+      ['لا، خليه','alt',async()=>{await save(item);showResult('suggestion','اقعد على حق السفير 😏',[['تمام','alt',closeAll]])}]
+    ]);
+  }else{await save(item);showResult('suggestion',SIT,[['تمام','alt',closeAll]])}
+});
 
 route();
 </script>
